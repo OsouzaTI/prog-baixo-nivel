@@ -4,6 +4,9 @@ section .data
 
 test_string: db "ozeias", 0
 
+section .bss
+buffer0: resb 20
+
 section .text
 
 strlen:

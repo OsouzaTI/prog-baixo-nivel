@@ -1,14 +1,3 @@
-%macro strlen 1
-    push rax
-    xor rax, rax
-    .loop:
-        cmp byte [rdi+rax], 0
-        je .end
-        inc rax
-        jmp .loop
-    pop rax
-%endmacro
-
 %macro exit 1
     mov rax, 60         ; codigo de sida
     mov rdi, %1
@@ -28,17 +17,29 @@ buffer2: resb 3
 
 section .text
 
+strlen:
+    xor rax, rax
+.loop0:
+    cmp byte [rdi+rax], 0
+    je .end0
+    inc rax
+    jmp .loop0
+.end0:
+    ret
+
 strprint:
     mov rax, 1                  ; syscall write
     mov rdi, 1                  ; descritor de stdout
-    mov rsi, buffer2            ; endereco do byte
+    mov rsi, buffer0            ; endereco do byte
     mov rdx, 6                  ; quantidade de bytes
     syscall 
     ret
 
 strcpy:
-    xor rax, rax
-
+    call strlen
+    cmp rax, rdx
+    jg .overflow
+    xor rax, rax    
 .loop:
     mov dl, byte [rdi + rax]
     mov [rsi + rax], dl
@@ -46,12 +47,17 @@ strcpy:
     cmp byte [rdi + rax], 0
     je .end
     jmp .loop
+
+.overflow:
+    exit 1
+
 .end:
     ret
 
 _start:
-    mov rdi, string0
-    mov rsi, buffer2
-    call strcpy
-    call strprint
-    exit 0
+    mov rdi, string0    ; string de origem
+    mov rsi, buffer0    ; buffer de destino
+    mov rdx, 20         ; tamanho do buffer
+    call strcpy         ; strcpy
+    call strprint       ; printando o buffer destino
+    exit 0              ; saindo com 0

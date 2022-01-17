@@ -1,5 +1,6 @@
 section .data
-
+    break_line:     db 0x0a
+    negative_symb:  db 0x2d
 section .text
 
 global newline
@@ -8,6 +9,8 @@ global strlen
 global strcpy
 global strcmp
 global intparse
+global intprint
+global negative
 
 ;------------ MACROS -----------------;
 %macro exit 1
@@ -22,27 +25,41 @@ global intparse
 ; NEW LINE: gera uma quebra de linha  ;
 ;-------------------------------------;
 newln:
-    mov rax, 1      ; syscall write
-    mov rdi, 1      ; descritor stdout
-    mov rsi, 0x0a   ; endereco do codigo de newline
-    mov rdx, 1      ; quantidade de bytes
+    mov rax, 1          ; syscall write
+    mov rdi, 1          ; descritor stdout
+    mov rsi, break_line ; endereco do codigo de newline
+    mov rdx, 1          ; quantidade de bytes
     syscall
     ret
 
-;----------------------------------------;
-; STRING PRINT: recebe uma string em 'r8';
-; ---------------------------------------;
+;-----------------------------------------------;
+; STRING PRINT: recebe uma string em 'r8'       ;
+; 16/01/22:                                     ;
+;   * dependendo do valor de rcx, o contador    ;
+;     de digitos da string podera ser chamado   ;
+;     ou nao.                                   ;
+;       rcx == 0 -> strlen sera chamada         ;
+;       rcx != 0 -> sera usado o valor de rcx   ;
+;                   como tamanho da string      ;
+; ----------------------------------------------;
 strprint: ; TODO: testar strlen automatico
+    cmp rcx, 0
+    jne .str_def
+.str_count:
     mov rdi, r8  ; movendo para rdi o endereco da string
     call strlen  ; chamando o strlen -> retorna o tamanho em rax
     mov rcx, rax ; movendo o tamanho da string para rcx
-
+.str_def:
     mov rax, 1   ; syscall write
     mov rdi, 1   ; descritor de stdout
     mov rsi, r8  ; endereco do byte
     mov rdx, rcx ; quantidade de bytes
+    
+    ; nao sei como isso para a falha de segmentacao
+    push rcx
     syscall 
     call newln
+    pop rcx
     ret
 
 ;-----------------------------------------;
@@ -51,11 +68,11 @@ strprint: ; TODO: testar strlen automatico
 ;-----------------------------------------;
 strlen:
     xor rax, rax
-    .loop:
+    .loop0:
         cmp byte [rdi+rax], 0
         je .end
         inc rax
-        jmp .loop
+        jmp .loop0
     .end:
         ret
 ;------------------------------------------------;
@@ -71,13 +88,13 @@ strcpy:
     cmp rax, rdx
     jg .overflow
     xor rax, rax    
-    .loop:
+    .loop1:
         mov dl, byte [rdi + rax]
         mov [rsi + rax], dl
         inc rax
         cmp byte [rdi + rax], 0
         je .end
-        jmp .loop
+        jmp .loop1
 
     .overflow:
         exit 1
@@ -96,7 +113,7 @@ strcmp:
     xor rax, rax                ; limpa o registrador que sera usado como saida
     mov r8,    1                ; limpa o registrador que sera usado como saida
 
-    .loop:
+    .loop2:
         cmp byte [rdi+rax], 0   ; compara se a string acabou
         je .end                 ; jump para o final da funcao
         cmp byte [rsi+rax], 0   ; compara se a string acabou
@@ -110,7 +127,7 @@ strcmp:
     .finally:
         cmp r8, 0               ; compara se r8 == 0
         je .end                 ; caso for igual, finaliza a execucao
-        jmp .loop               ; caso o jump acima não for executado volte para .loop
+        jmp .loop2               ; caso o jump acima não for executado volte para .loop
 
     .not_equal:
         dec r8  ; decrementa registrador r8
@@ -129,7 +146,8 @@ intparse:
     xor rcx, rcx    ; limpa rax
     xor rdx, rdx    ; limpa rdx
     xor rsi, rsi    ; flag de numero negativo   
-    .loop:
+    xor r8, r8
+    .loop3:
         
         movzx r8, byte [rdi + rcx]
         test r8, r8
@@ -146,7 +164,7 @@ intparse:
         mov rsi, 1      ; definido como (0) positivo | (1) negativo
     .L2:
         inc rcx    
-        jmp .loop
+        jmp .loop3
 
     .L3:
         neg rdx         ; inverte o sinal do numero
@@ -163,10 +181,10 @@ intparse:
 ; impresso (caso negativo iniciara com '-')     ;
 ;-----------------------------------------------;
 negative:
-    mov rax, 1       ; syscall write
-    mov rdi, 1       ; descritor stdout
-    mov rsi, 0x2d    ; endereco do codigo de newline
-    mov rdx, 1       ; quantidade de bytes
+    mov rax, 1              ; syscall write
+    mov rdi, 1              ; descritor stdout
+    mov rsi, negative_symb  ; endereco do codigo de newline
+    mov rdx, 1              ; quantidade de bytes
     syscall
     ret
 
@@ -175,7 +193,7 @@ intprint:
     xor rcx, rcx
     mov r15, 10     ; constante de divisao
     cmp rax, 0      ; compara rax com 0
-    jge .loop       ; caso for maior ou igual a 0 -> jump loop
+    jge .loop4       ; caso for maior ou igual a 0 -> jump loop4
     ; caso for menor que 0
     push rax        ; guarda rax
     push rcx        ; guarda rcx
@@ -184,7 +202,7 @@ intprint:
     pop rax         ; restaura rax    
     neg rax         ; inverte o sinal de rax (negativo -> positivo)
 
-.loop:
+.loop4:
     xor rdx, rdx    ; limpa o registrador.
 ;---------------------------------------------
 ;   O comando div, realiza a operacao          
@@ -200,7 +218,7 @@ intprint:
     mov [rsp], dl   ; movendo o digito devidamente tratrado
     inc rcx         ; contador de digitos
     test rax, rax   ; verificando se rax == 0
-    jnz .loop
+    jnz .loop4
 
     mov r8, rsp     ; armazenando o valor de rsp em r8
     call strprint   ; chamada de funcao
